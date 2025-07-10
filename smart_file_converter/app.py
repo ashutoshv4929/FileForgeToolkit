@@ -1,9 +1,15 @@
 import os
 import logging
+import json
+from google.oauth2 import service_account
+from google.cloud import vision
+from google.cloud import storage
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase
 from werkzeug.middleware.proxy_fix import ProxyFix
+import shutil
+import uuid
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -32,7 +38,30 @@ app.config['PROCESSED_FOLDER'] = 'static/processed'
 
 # Google Cloud configuration
 app.config['GOOGLE_CLOUD_PROJECT'] = os.environ.get("GOOGLE_CLOUD_PROJECT")
-app.config['GOOGLE_CLOUD_STORAGE_BUCKET'] = os.environ.get("GOOGLE_CLOUD_STORAGE_BUCKET")
+
+# Google Cloud credentials setup
+google_creds_json = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS_JSON')
+if google_creds_json:
+    google_creds_dict = json.loads(google_creds_json)
+    credentials = service_account.Credentials.from_service_account_info(google_creds_dict)
+else:
+    credentials = None
+
+vision_client = vision.ImageAnnotatorClient(credentials=credentials)
+storage_client = storage.Client(credentials=credentials, project=os.environ.get('GCLOUD_PROJECT'))
+
+# Use Google Cloud Storage
+if storage_client:
+    bucket_name = os.environ.get('GCLOUD_STORAGE_BUCKET')
+    bucket = storage_client.bucket(bucket_name)
+    if not bucket.exists():
+        bucket.create()
+
+def save_file_to_gcs(file):
+    filename = str(uuid.uuid4()) + os.path.splitext(file.filename)[1]
+    blob = bucket.blob(filename)
+    blob.upload_from_file(file)
+    return blob.public_url
 
 # Initialize the app with the extension
 db.init_app(app)
