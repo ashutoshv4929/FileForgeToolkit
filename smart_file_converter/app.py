@@ -10,6 +10,9 @@ from sqlalchemy.orm import DeclarativeBase
 from werkzeug.middleware.proxy_fix import ProxyFix
 import shutil
 import uuid
+import base64
+import re
+import binascii
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -42,9 +45,32 @@ app.config['GOOGLE_CLOUD_PROJECT'] = os.environ.get("GOOGLE_CLOUD_PROJECT")
 # Google Cloud credentials setup
 google_creds_json = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS_JSON')
 if google_creds_json:
-    google_creds_dict = json.loads(google_creds_json)
-    credentials = service_account.Credentials.from_service_account_info(google_creds_dict)
+    try:
+        google_creds_dict = json.loads(google_creds_json)
+        
+        # Fix private key padding if needed
+        private_key = google_creds_dict.get('private_key', '')
+        if private_key:
+            # Remove extra spaces/newlines
+            private_key = re.sub(r'\s+', '', private_key)
+            
+            # Ensure proper padding
+            try:
+                base64.b64decode(private_key)
+            except binascii.Error:
+                # Add padding if missing
+                padding_needed = 4 - (len(private_key) % 4)
+                private_key += '=' * padding_needed
+                
+            google_creds_dict['private_key'] = private_key
+            
+        credentials = service_account.Credentials.from_service_account_info(google_creds_dict)
+        print("Google credentials loaded successfully")
+    except Exception as e:
+        print(f"Error loading Google credentials: {e}")
+        credentials = None
 else:
+    print("GOOGLE_APPLICATION_CREDENTIALS_JSON not set")
     credentials = None
 
 vision_client = vision.ImageAnnotatorClient(credentials=credentials)
