@@ -3,24 +3,15 @@ services:
     name: file-forge-toolkit
     env: python
     region: singapore  # Choose your preferred region
+    python:
+      version: 3.9.11
     buildCommand: |
-      apt-get update && \
-      apt-get install -y tesseract-ocr \
-                         libtesseract-dev \
-                         libleptonica-dev \
-                         poppler-utils \
-                         python3-pip \
-                         python3-dev \
-                         build-essential \
-                         libssl-dev \
-                         libffi-dev \
-                         libmagic1
-      pip install --upgrade pip
+      python -m pip install --upgrade pip
       pip install -r requirements.txt
     startCommand: gunicorn wsgi:application
     envVars:
       - key: PYTHON_VERSION
-        value: 3.9.0
+        value: 3.9.11
       - key: PYTHONUNBUFFERED
         value: true
       - key: FLASK_ENV
