@@ -56,7 +56,7 @@ if not api_key:
     logging.error("ERROR: GOOGLE_API_KEY environment variable not set")
     exit(1)
 
-vision_client = vision.ImageAnnotatorClient(client_options={"api_key": api_key})
+vision_client = vision.ImageAnnotatorClient(credentials=None, client_options={"api_key": api_key})
 
 # --- END OF CHANGED SECTION ---
 
