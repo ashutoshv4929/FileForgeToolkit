@@ -63,14 +63,6 @@ project_id = os.environ.get('GOOGLE_CLOUD_PROJECT_ID')
 if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
     del os.environ['GOOGLE_APPLICATION_CREDENTIALS']
 
-# Initialize Google Cloud Vision API
-api_key = os.environ.get('GOOGLE_API_KEY')
-project_id = os.environ.get('GOOGLE_CLOUD_PROJECT_ID')
-
-# Unset GOOGLE_APPLICATION_CREDENTIALS if set
-if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
-    del os.environ['GOOGLE_APPLICATION_CREDENTIALS']
-
 if api_key and project_id:
     client_options = {"api_key": api_key, "quota_project_id": project_id}
     vision_client = vision.ImageAnnotatorClient(client_options=client_options)
