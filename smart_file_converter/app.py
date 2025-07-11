@@ -1,6 +1,7 @@
 import os
 import logging
 import json
+import sys
 from google.oauth2 import service_account
 from google.cloud import vision
 from google.cloud import storage
@@ -13,6 +14,9 @@ import uuid
 import base64
 import re
 import binascii
+
+# Add the current directory to sys.path
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
