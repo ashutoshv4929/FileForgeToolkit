@@ -25,30 +25,31 @@ venv/
 env/
 ENV/
 
-# Environment variables
-.env
-
 # IDE
 .idea/
 .vscode/
 *.swp
 *.swo
-*~
 
-# Local development
-data/
-instance/
-.webassets-cache
-
-# Logs
-*.log
-
-# Local database
+# Database
 *.db
 *.sqlite3
 
-# Uploads
-uploads/
+# Environment variables
+.env
+
+# Uploads and local files
+/uploads/
+*.pdf
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.doc
+*.docx
+
+# Logs
+*.log
 
 # OS generated files
 .DS_Store

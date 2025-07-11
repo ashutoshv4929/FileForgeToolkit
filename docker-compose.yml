@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - .:/app
+      - uploads:/app/uploads
+    environment:
+      - FLASK_APP=wsgi.py
+      - FLASK_ENV=development
+      - SECRET_KEY=dev-secret-key
+      - DATABASE_URL=sqlite:////app/instance/app.db
+      - TESSERACT_CMD=/usr/bin/tesseract
+      - UPLOAD_FOLDER=/app/uploads
+    depends_on:
+      - db
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  db:
+    image: postgres:13-alpine
+    environment:
+      - POSTGRES_USER=fileforge
+      - POSTGRES_PASSWORD=fileforgesecret
+      - POSTGRES_DB=fileforgedb
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    ports:
+      - "5432:5432"
+
+volumes:
+  uploads:
+  postgres_data:
