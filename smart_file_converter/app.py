@@ -63,18 +63,21 @@ project_id = os.environ.get('GOOGLE_CLOUD_PROJECT_ID')
 if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
     del os.environ['GOOGLE_APPLICATION_CREDENTIALS']
 
-# Initialize Vision client with API key
+# Initialize Google Cloud Vision API
+api_key = os.environ.get('GOOGLE_API_KEY')
+project_id = os.environ.get('GOOGLE_CLOUD_PROJECT_ID')
+
+# Unset GOOGLE_APPLICATION_CREDENTIALS if set
+if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
+    del os.environ['GOOGLE_APPLICATION_CREDENTIALS']
+
 if api_key and project_id:
-    vision_client = vision.ImageAnnotatorClient(
-        credentials=None,
-        client_options={"api_key": api_key, "quota_project_id": project_id}
-    )
-    logging.debug(f"Google Cloud Vision initialized with API key and project ID")
+    client_options = {"api_key": api_key, "quota_project_id": project_id}
+    vision_client = vision.ImageAnnotatorClient(client_options=client_options)
+    logging.debug("Google Cloud Vision initialized with API key and project ID")
 else:
     vision_client = None
-    logging.error("Google Cloud Vision API not configured")
-    logging.debug(f"GOOGLE_API_KEY: {'set' if api_key else 'not set'}")
-    logging.debug(f"GOOGLE_CLOUD_PROJECT_ID: {'set' if project_id else 'not set'}")
+    logging.error("Google Cloud Vision not initialized - missing API key or project ID")
 
 # Initialize Google Cloud Storage
 bucket_name = os.environ.get('GOOGLE_CLOUD_STORAGE_BUCKET_NAME')
