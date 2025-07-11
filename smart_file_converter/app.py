@@ -80,7 +80,7 @@ else:
 bucket_name = os.environ.get('GOOGLE_CLOUD_STORAGE_BUCKET_NAME')
 if bucket_name and api_key and project_id:
     # Create credentials with API key
-    from google.oauth2 import credentials
+    from google.auth import credentials  
     from google.auth.transport.requests import Request
     
     # Create an anonymous credentials object and set the API key in headers
