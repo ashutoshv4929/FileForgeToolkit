@@ -1,26 +1,26 @@
+import io
 import os
 import uuid
-import subprocess
+import tempfile
+import zipfile
 from datetime import datetime
-from flask import render_template, request, redirect, url_for, flash, jsonify, send_file
+from pathlib import Path
+
+from flask import render_template, request, redirect, url_for, flash, jsonify, send_file, current_app, send_from_directory
 from werkzeug.utils import secure_filename
-from app import app, db
+from sqlalchemy import func
+
+from app import app, db, storage_service
 from .models import ConversionHistory, ExtractedText, AppSettings
 from smart_file_converter.services.ocr_service import OCRService
-from sqlalchemy import func
 
 # Initialize services
 ocr_service = OCRService()
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'txt'}
 
-# Remove cloud storage upload references
-# Store files locally instead
-UPLOAD_FOLDER = 'uploads'
-app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
-
-# Ensure upload folder exists
-os.makedirs(UPLOAD_FOLDER, exist_ok=True)
+# Get upload folder from app config
+UPLOAD_FOLDER = app.config.get('UPLOAD_FOLDER', 'uploads')
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -47,6 +47,26 @@ def index():
     stats = get_stats()
     return render_template('index.html', stats=stats)
 
+@app.route('/download/<path:filename>')
+def download_file(filename):
+    """Download a file"""
+    try:
+        file_path = storage_service.get_file_path(filename)
+        if not file_path or not os.path.exists(file_path):
+            flash('File not found', 'error')
+            return redirect(url_for('my_files'))
+            
+        return send_from_directory(
+            os.path.dirname(file_path),
+            os.path.basename(file_path),
+            as_attachment=True,
+            download_name=filename.split('_', 1)[-1]  # Remove UUID from download filename
+        )
+    except Exception as e:
+        app.logger.error(f'Error downloading file {filename}: {str(e)}')
+        flash('Error downloading file', 'error')
+        return redirect(url_for('my_files'))
+
 @app.route('/upload')
 def upload_page():
     """File upload page"""
@@ -56,42 +76,37 @@ def upload_page():
 def upload_file():
     """Handle file upload"""
     if 'file' not in request.files:
-        flash('No file selected', 'error')
+        flash('No file part')
         return redirect(request.url)
     
     file = request.files['file']
     if file.filename == '':
-        flash('No file selected', 'error')
+        flash('No selected file')
         return redirect(request.url)
     
     if file and allowed_file(file.filename):
-        # Generate unique filename
-        filename = str(uuid.uuid4()) + '_' + secure_filename(file.filename)
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+        # Generate a unique filename
+        filename = f"{uuid.uuid4()}_{secure_filename(file.filename)}"
         
-        try:
-            # Ensure upload directory exists
-            os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-            file.save(filepath)
-            
-            # Save to database
-            conversion = ConversionHistory(
-                filename=filename,
-                original_filename=file.filename,
-                file_type=file.filename.rsplit('.', 1)[1].lower(),
-                conversion_type='local_upload',
-                file_size=os.path.getsize(filepath),
-                status='completed',
-                processed_at=datetime.utcnow()
-            )
-            db.session.add(conversion)
-            db.session.commit()
-            
-            return redirect(url_for('my_files'))
-            
-        except Exception as e:
-            flash(f'Error uploading file: {str(e)}', 'error')
-            return redirect(request.url)
+        # Save file using storage service
+        file_path = storage_service.upload_file(file, filename)
+        
+        # Log the upload
+        history = ConversionHistory(
+            filename=filename,
+            file_type=filename.rsplit('.', 1)[1].lower(),
+            status='uploaded',
+            operation='upload',
+            file_path=file_path
+        )
+        db.session.add(history)
+        db.session.commit()
+        
+        flash('File successfully uploaded')
+        return redirect(url_for('my_files'))
+    
+    flash('Invalid file type. Please upload PDF, DOC, DOCX, TXT, or image files.', 'error')
+    return redirect(request.url)
     
     flash('Invalid file type. Please upload PDF, DOC, DOCX, TXT, or image files.', 'error')
     return redirect(request.url)
@@ -114,14 +129,10 @@ def extract_text():
         return redirect(request.url)
     
     if file and file.filename.rsplit('.', 1)[1].lower() in ['png', 'jpg', 'jpeg', 'gif', 'pdf']:
-        # Generate unique filename
-        filename = str(uuid.uuid4()) + '_' + secure_filename(file.filename)
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        
         try:
-            # Ensure upload directory exists
-            os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-            file.save(filepath)
+            # Generate unique filename and save file using storage service
+            filename = f"{uuid.uuid4()}_{secure_filename(file.filename)}"
+            filepath = storage_service.upload_file(file, filename)
             
             # Extract text using OCR
             extracted_text, confidence = ocr_service.extract_text(filepath)
@@ -178,17 +189,14 @@ def save_text():
     try:
         # Generate filename for text file
         text_filename = f"{original_filename.rsplit('.', 1)[0]}_extracted.txt"
-        text_filepath = os.path.join(app.config['UPLOAD_FOLDER'], text_filename)
         
-        # Ensure upload directory exists
-        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-        
-        # Save text to file
-        with open(text_filepath, 'w', encoding='utf-8') as f:
-            f.write(text_content)
+        # Save text to file using storage service
+        from io import StringIO
+        file_obj = StringIO(text_content)
+        file_path = storage_service.upload_file(file_obj, text_filename, content_type='text/plain')
         
         flash('Text saved successfully!', 'success')
-        return send_file(text_filepath, as_attachment=True, download_name=text_filename)
+        return redirect(url_for('download_file', filename=os.path.basename(file_path)))
         
     except Exception as e:
         app.logger.error(f'Error saving text: {str(e)}')
@@ -199,12 +207,40 @@ def save_text():
 def my_files():
     """Display user's uploaded files"""
     files = ConversionHistory.query.order_by(ConversionHistory.created_at.desc()).all()
+    
+    # Add file existence check and human-readable size
+    for file in files:
+        file.exists = storage_service.file_exists(file.filename) if file.filename else False
+        file.human_size = _human_readable_size(file.file_size) if file.file_size else 'N/A'
+    
     return render_template('my_files.html', files=files)
+
+def _human_readable_size(size_bytes):
+    """Convert file size in bytes to human readable format"""
+    if not size_bytes:
+        return "0 B"
+    
+    size_names = ('B', 'KB', 'MB', 'GB', 'TB')
+    i = 0
+    size = float(size_bytes)
+    
+    while size >= 1024 and i < len(size_names) - 1:
+        size /= 1024
+        i += 1
+    
+    return f"{size:.2f} {size_names[i]}"
 
 @app.route('/history')
 def history():
     """Display conversion history"""
     history_records = ConversionHistory.query.order_by(ConversionHistory.created_at.desc()).all()
+    
+    # Add human-readable size and format timestamps
+    for record in history_records:
+        record.human_size = _human_readable_size(record.file_size) if record.file_size else 'N/A'
+        record.formatted_date = record.processed_at.strftime('%Y-%m-%d %H:%M:%S') if record.processed_at else 'N/A'
+        record.exists = storage_service.file_exists(record.filename) if record.filename else False
+    
     return render_template('history.html', history=history_records)
 
 # PDF Tools Routes
@@ -251,38 +287,48 @@ def merge_pdf():
         # Save uploaded files temporarily
         for file in files:
             if file and file.filename.lower().endswith('.pdf'):
-                filename = str(uuid.uuid4()) + '_' + secure_filename(file.filename)
-                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                file.save(filepath)
-                merger.append(filepath)
-                temp_files.append(filepath)
+                # Save file using storage service
+                filename = f"{uuid.uuid4()}_{secure_filename(file.filename)}"
+                file_path = storage_service.upload_file(file, filename)
+                
+                # Read the file back for merging
+                with storage_service.get_file(file_path) as f:
+                    merger.append(f)
+                
+                temp_files.append(file_path)
         
-        # Create merged PDF
-        merged_filename = f"merged_{uuid.uuid4().hex[:8]}.pdf"
-        merged_path = os.path.join(app.config['UPLOAD_FOLDER'], merged_filename)
-        
-        merger.write(merged_path)
+        # Create merged PDF in memory
+        import io
+        merged_pdf = io.BytesIO()
+        merger.write(merged_pdf)
         merger.close()
+        merged_pdf.seek(0)
+        
+        # Save merged PDF using storage service
+        merged_filename = f"merged_{uuid.uuid4().hex[:8]}.pdf"
+        merged_path = storage_service.upload_file(merged_pdf, merged_filename, content_type='application/pdf')
         
         # Clean up temp files
         for temp_file in temp_files:
-            os.remove(temp_file)
+            storage_service.delete_file(temp_file)
         
         # Save to database
+        file_size = os.path.getsize(merged_path) if os.path.exists(merged_path) else 0
         conversion = ConversionHistory(
-            filename=merged_filename,
+            filename=os.path.basename(merged_path),
             original_filename='merged_pdf',
             file_type='pdf',
             conversion_type='merge_pdf',
-            file_size=os.path.getsize(merged_path),
+            file_size=file_size,
             status='completed',
-            processed_at=datetime.utcnow()
+            processed_at=datetime.utcnow(),
+            file_path=merged_path
         )
         db.session.add(conversion)
         db.session.commit()
         
         flash('PDFs merged successfully!', 'success')
-        return send_file(merged_path, as_attachment=True, download_name='merged.pdf')
+        return redirect(url_for('download_file', filename=os.path.basename(merged_path)))
         
     except Exception as e:
         app.logger.error(f'PDF merge error: {str(e)}')
@@ -305,51 +351,59 @@ def split_pdf():
         return redirect(request.url)
     
     try:
-        # Save uploaded file
-        filename = str(uuid.uuid4()) + '_' + secure_filename(file.filename)
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
+        # Save uploaded file using storage service
+        filename = f"{uuid.uuid4()}_{secure_filename(file.filename)}"
+        file_path = storage_service.upload_file(file, filename)
         
-        # Split PDF
-        reader = PdfReader(filepath)
-        output_dir = os.path.join(app.config['UPLOAD_FOLDER'], f"split_{uuid.uuid4().hex[:8]}")
-        os.makedirs(output_dir, exist_ok=True)
-        
-        page_files = []
-        for page_num in range(len(reader.pages)):
-            writer = PdfWriter()
-            writer.add_page(reader.pages[page_num])
+        # Read the PDF
+        with storage_service.get_file(file_path) as f:
+            reader = PdfReader(f)
             
-            page_filename = f"page_{page_num + 1}.pdf"
-            page_path = os.path.join(output_dir, page_filename)
-            
-            with open(page_path, 'wb') as output_file:
-                writer.write(output_file)
-            page_files.append(page_path)
+            # Split PDF into pages
+            page_files = []
+            for page_num in range(len(reader.pages)):
+                writer = PdfWriter()
+                writer.add_page(reader.pages[page_num])
+                
+                # Save page to memory
+                page_buffer = io.BytesIO()
+                writer.write(page_buffer)
+                page_buffer.seek(0)
+                
+                # Save page using storage service
+                page_filename = f"page_{page_num + 1}.pdf"
+                page_path = storage_service.upload_file(page_buffer, page_filename, content_type='application/pdf')
+                page_files.append(page_path)
         
-        # Create zip file
+        # Create zip file in memory
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w') as zip_file:
+            for page_path in page_files:
+                with storage_service.get_file(page_path) as page_file:
+                    zip_file.writestr(os.path.basename(page_path), page_file.read())
+        
+        zip_buffer.seek(0)
+        
+        # Save zip file using storage service
         zip_filename = f"split_pages_{uuid.uuid4().hex[:8]}.zip"
-        zip_path = os.path.join(app.config['UPLOAD_FOLDER'], zip_filename)
-        
-        with zipfile.ZipFile(zip_path, 'w') as zip_file:
-            for page_file in page_files:
-                zip_file.write(page_file, os.path.basename(page_file))
+        zip_path = storage_service.upload_file(zip_buffer, zip_filename, content_type='application/zip')
         
         # Clean up
-        os.remove(filepath)
+        storage_service.delete_file(file_path)
         for page_file in page_files:
-            os.remove(page_file)
-        os.rmdir(output_dir)
+            storage_service.delete_file(page_file)
         
         # Save to database
+        file_size = os.path.getsize(zip_path) if os.path.exists(zip_path) else 0
         conversion = ConversionHistory(
-            filename=zip_filename,
+            filename=os.path.basename(zip_path),
             original_filename=file.filename,
             file_type='pdf',
             conversion_type='split_pdf',
-            file_size=os.path.getsize(zip_path),
+            file_size=file_size,
             status='completed',
-            processed_at=datetime.utcnow()
+            processed_at=datetime.utcnow(),
+            file_path=zip_path
         )
         db.session.add(conversion)
         db.session.commit()
@@ -378,46 +432,64 @@ def pdf_to_images():
         return redirect(request.url)
     
     try:
-        # Save uploaded file
-        filename = str(uuid.uuid4()) + '_' + secure_filename(file.filename)
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-        file.save(filepath)
+        # Save uploaded file using storage service
+        filename = f"{uuid.uuid4()}_{secure_filename(file.filename)}"
+        file_path = storage_service.upload_file(file, filename)
         
-        # Convert PDF to images
-        images = pdf2image.convert_from_path(filepath)
-        output_dir = os.path.join(app.config['UPLOAD_FOLDER'], f"images_{uuid.uuid4().hex[:8]}")
-        os.makedirs(output_dir, exist_ok=True)
+        # Convert PDF to images in memory
+        with storage_service.get_file(file_path) as f:
+            # Save to a temporary file for pdf2image
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_pdf:
+                temp_pdf.write(f.read())
+                temp_pdf_path = temp_pdf.name
+            
+            try:
+                images = pdf2image.convert_from_path(temp_pdf_path)
+            finally:
+                os.unlink(temp_pdf_path)
         
+        # Save images to storage service
         image_files = []
         for i, image in enumerate(images):
+            # Save image to memory
+            img_buffer = io.BytesIO()
+            image.save(img_buffer, format='PNG')
+            img_buffer.seek(0)
+            
+            # Save image using storage service
             image_filename = f"page_{i + 1}.png"
-            image_path = os.path.join(output_dir, image_filename)
-            image.save(image_path, 'PNG')
+            image_path = storage_service.upload_file(img_buffer, image_filename, content_type='image/png')
             image_files.append(image_path)
         
-        # Create zip file
-        zip_filename = f"pdf_images_{uuid.uuid4().hex[:8]}.zip"
-        zip_path = os.path.join(app.config['UPLOAD_FOLDER'], zip_filename)
+        # Create zip file in memory
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, 'w') as zip_file:
+            for img_path in image_files:
+                with storage_service.get_file(img_path) as img_file:
+                    zip_file.writestr(os.path.basename(img_path), img_file.read())
         
-        with zipfile.ZipFile(zip_path, 'w') as zip_file:
-            for image_file in image_files:
-                zip_file.write(image_file, os.path.basename(image_file))
+        zip_buffer.seek(0)
+        
+        # Save zip file using storage service
+        zip_filename = f"pdf_images_{uuid.uuid4().hex[:8]}.zip"
+        zip_path = storage_service.upload_file(zip_buffer, zip_filename, content_type='application/zip')
         
         # Clean up
-        os.remove(filepath)
-        for image_file in image_files:
-            os.remove(image_file)
-        os.rmdir(output_dir)
+        storage_service.delete_file(file_path)
+        for img_file in image_files:
+            storage_service.delete_file(img_file)
         
         # Save to database
+        file_size = os.path.getsize(zip_path) if os.path.exists(zip_path) else 0
         conversion = ConversionHistory(
-            filename=zip_filename,
+            filename=os.path.basename(zip_path),
             original_filename=file.filename,
             file_type='pdf',
             conversion_type='pdf_to_images',
-            file_size=os.path.getsize(zip_path),
+            file_size=file_size,
             status='completed',
-            processed_at=datetime.utcnow()
+            processed_at=datetime.utcnow(),
+            file_path=zip_path
         )
         db.session.add(conversion)
         db.session.commit()
@@ -442,44 +514,61 @@ def images_to_pdf():
     
     try:
         images = []
-        temp_files = []
+        temp_file_paths = []
         
         for file in files:
             if file and file.filename.lower().endswith(('.png', '.jpg', '.jpeg')):
-                filename = str(uuid.uuid4()) + '_' + secure_filename(file.filename)
-                filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-                file.save(filepath)
+                # Save file using storage service
+                filename = f"{uuid.uuid4()}_{secure_filename(file.filename)}"
+                file_path = storage_service.upload_file(file, filename)
                 
-                # Open and convert image
-                image = Image.open(filepath)
-                if image.mode != 'RGB':
-                    image = image.convert('RGB')
-                images.append(image)
-                temp_files.append(filepath)
+                # Open image from storage
+                with storage_service.get_file(file_path) as f:
+                    # Open and convert image
+                    image = Image.open(f)
+                    if image.mode != 'RGB':
+                        image = image.convert('RGB')
+                    
+                    # Save to memory
+                    img_buffer = io.BytesIO()
+                    image.save(img_buffer, format='JPEG')
+                    img_buffer.seek(0)
+                    
+                    # Create a new image from buffer
+                    img_buffer.seek(0)
+                    images.append(Image.open(img_buffer))
+                    
+                    # Store the path for cleanup
+                    temp_file_paths.append(file_path)
         
         if not images:
             flash('No valid image files found', 'error')
             return redirect(request.url)
         
-        # Create PDF
-        pdf_filename = f"images_to_pdf_{uuid.uuid4().hex[:8]}.pdf"
-        pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], pdf_filename)
+        # Create PDF in memory
+        pdf_buffer = io.BytesIO()
+        images[0].save(pdf_buffer, format='PDF', save_all=True, append_images=images[1:])
+        pdf_buffer.seek(0)
         
-        images[0].save(pdf_path, save_all=True, append_images=images[1:])
+        # Save PDF using storage service
+        pdf_filename = f"images_to_pdf_{uuid.uuid4().hex[:8]}.pdf"
+        pdf_path = storage_service.upload_file(pdf_buffer, pdf_filename, content_type='application/pdf')
         
         # Clean up temp files
-        for temp_file in temp_files:
-            os.remove(temp_file)
+        for temp_file in temp_file_paths:
+            storage_service.delete_file(temp_file)
         
         # Save to database
+        file_size = os.path.getsize(pdf_path) if os.path.exists(pdf_path) else 0
         conversion = ConversionHistory(
-            filename=pdf_filename,
+            filename=os.path.basename(pdf_path),
             original_filename='images_to_pdf',
             file_type='pdf',
             conversion_type='images_to_pdf',
-            file_size=os.path.getsize(pdf_path),
+            file_size=file_size,
             status='completed',
-            processed_at=datetime.utcnow()
+            processed_at=datetime.utcnow(),
+            file_path=pdf_path
         )
         db.session.add(conversion)
         db.session.commit()

@@ -1,2 +1,6 @@
+from .local_storage import LocalStorageService
 from .ocr_service import OCRService
-from .cloud_storage import CloudStorageService
+
+# Initialize services
+ocr_service = OCRService()
+storage_service = LocalStorageService('uploads')
