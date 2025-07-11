@@ -7,11 +7,27 @@ services:
       apt-get install -y tesseract-ocr \
                          libtesseract-dev \
                          libleptonica-dev \
-                         poppler-utils
+                         poppler-utils \
+                         python3-pip \
+                         python3-dev \
+                         build-essential \
+                         libssl-dev \
+                         libffi-dev 
+      pip install --upgrade pip
       pip install -r requirements.txt
-    startCommand: gunicorn smart_file_converter.app:app
+    startCommand: gunicorn wsgi:application
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.0
+      - key: PYTHONUNBUFFERED
+        value: true
     aptPackages:
       - tesseract-ocr
       - libtesseract-dev
       - libleptonica-dev
       - poppler-utils
+      - python3-pip
+      - python3-dev
+      - build-essential
+      - libssl-dev
+      - libffi-dev
