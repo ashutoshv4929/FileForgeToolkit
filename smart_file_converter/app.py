@@ -83,9 +83,8 @@ if bucket_name and api_key and project_id:
     from google.auth import credentials  
     from google.auth.transport.requests import Request
     
-    # Create an anonymous credentials object and set the API key in headers
+    # Create an anonymous credentials object
     creds = credentials.AnonymousCredentials()
-    creds = creds.with_quota_project(project_id)
     
     # Create a custom request object with the API key header
     class CustomRequest(Request):
