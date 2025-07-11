@@ -50,6 +50,10 @@ if not project_id:
     exit(1)
 app.config['GOOGLE_CLOUD_PROJECT'] = project_id
 
+# Unset the GOOGLE_APPLICATION_CREDENTIALS environment variable if it exists
+if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
+    del os.environ['GOOGLE_APPLICATION_CREDENTIALS']
+
 # Initialize Google Cloud Vision client
 api_key = os.environ.get('GOOGLE_API_KEY')
 if not api_key:
