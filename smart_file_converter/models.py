@@ -1,4 +1,4 @@
-from app import db
+from smart_file_converter.extensions import db
 from datetime import datetime
 from sqlalchemy import func
 

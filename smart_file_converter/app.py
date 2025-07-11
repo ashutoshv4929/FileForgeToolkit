@@ -3,8 +3,7 @@ import logging
 import json
 import sys
 from flask import Flask
-from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy.orm import DeclarativeBase
+from smart_file_converter.extensions import db
 from werkzeug.middleware.proxy_fix import ProxyFix
 import shutil
 import uuid
@@ -14,11 +13,6 @@ import binascii
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
-
-class Base(DeclarativeBase):
-    pass
-
-db = SQLAlchemy(model_class=Base)
 
 # Create the app
 app = Flask(__name__)
