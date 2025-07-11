@@ -3,5 +3,6 @@ Flask-SQLAlchemy==3.1.1
 gunicorn==23.0.0
 pdf2image==1.17.0
 olefile==0.46
-pytesseract==0.3.10
-Pillow==10.3.0
+easyocr==1.7.1
+torch==2.3.0
+torchvision==0.18.0

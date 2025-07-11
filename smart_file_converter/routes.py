@@ -7,14 +7,20 @@ from werkzeug.utils import secure_filename
 from app import app, db
 from models import ConversionHistory, ExtractedText, AppSettings
 from smart_file_converter.services.ocr_service import OCRService
-from smart_file_converter.services.cloud_storage import CloudStorageService
 from sqlalchemy import func
 
 # Initialize services
 ocr_service = OCRService()
-cloud_storage_service = CloudStorageService()
 
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'txt'}
+
+# Remove cloud storage upload references
+# Store files locally instead
+UPLOAD_FOLDER = 'uploads'
+app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
+
+# Ensure upload folder exists
+os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
@@ -48,7 +54,7 @@ def upload_page():
 
 @app.route('/upload', methods=['POST'])
 def upload_file():
-    """Handle file upload to Google Cloud Storage"""
+    """Handle file upload"""
     if 'file' not in request.files:
         flash('No file selected', 'error')
         return redirect(request.url)
@@ -68,56 +74,18 @@ def upload_file():
             os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
             file.save(filepath)
             
-            # Upload to Google Cloud Storage
-            if cloud_storage_service.is_configured():
-                try:
-                    cloud_storage_service.upload_file(filepath, filename)
-                    flash('File uploaded to Google Cloud Storage successfully!', 'success')
-                    
-                    # Save to database
-                    conversion = ConversionHistory(
-                        filename=filename,
-                        original_filename=file.filename,
-                        file_type=file.filename.rsplit('.', 1)[1].lower(),
-                        conversion_type='cloud_upload',
-                        file_size=os.path.getsize(filepath),
-                        status='completed',
-                        processed_at=datetime.utcnow()
-                    )
-                    db.session.add(conversion)
-                    db.session.commit()
-                    
-                except Exception as e:
-                    app.logger.error(f'Cloud storage upload error: {str(e)}')
-                    flash(f'Error uploading to cloud: {str(e)}', 'error')
-                    
-                    # Save locally as fallback
-                    conversion = ConversionHistory(
-                        filename=filename,
-                        original_filename=file.filename,
-                        file_type=file.filename.rsplit('.', 1)[1].lower(),
-                        conversion_type='local_upload',
-                        file_size=os.path.getsize(filepath),
-                        status='completed',
-                        processed_at=datetime.utcnow()
-                    )
-                    db.session.add(conversion)
-                    db.session.commit()
-            else:
-                flash('Google Cloud Storage not configured. File saved locally.', 'warning')
-                
-                # Save to database
-                conversion = ConversionHistory(
-                    filename=filename,
-                    original_filename=file.filename,
-                    file_type=file.filename.rsplit('.', 1)[1].lower(),
-                    conversion_type='local_upload',
-                    file_size=os.path.getsize(filepath),
-                    status='completed',
-                    processed_at=datetime.utcnow()
-                )
-                db.session.add(conversion)
-                db.session.commit()
+            # Save to database
+            conversion = ConversionHistory(
+                filename=filename,
+                original_filename=file.filename,
+                file_type=file.filename.rsplit('.', 1)[1].lower(),
+                conversion_type='local_upload',
+                file_size=os.path.getsize(filepath),
+                status='completed',
+                processed_at=datetime.utcnow()
+            )
+            db.session.add(conversion)
+            db.session.commit()
             
             return redirect(url_for('my_files'))
             
@@ -210,10 +178,10 @@ def save_text():
     try:
         # Generate filename for text file
         text_filename = f"{original_filename.rsplit('.', 1)[0]}_extracted.txt"
-        text_filepath = os.path.join(app.config['PROCESSED_FOLDER'], text_filename)
+        text_filepath = os.path.join(app.config['UPLOAD_FOLDER'], text_filename)
         
-        # Ensure processed directory exists
-        os.makedirs(app.config['PROCESSED_FOLDER'], exist_ok=True)
+        # Ensure upload directory exists
+        os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
         
         # Save text to file
         with open(text_filepath, 'w', encoding='utf-8') as f:
@@ -291,9 +259,8 @@ def merge_pdf():
         
         # Create merged PDF
         merged_filename = f"merged_{uuid.uuid4().hex[:8]}.pdf"
-        merged_path = os.path.join(app.config['PROCESSED_FOLDER'], merged_filename)
+        merged_path = os.path.join(app.config['UPLOAD_FOLDER'], merged_filename)
         
-        os.makedirs(app.config['PROCESSED_FOLDER'], exist_ok=True)
         merger.write(merged_path)
         merger.close()
         
@@ -345,7 +312,7 @@ def split_pdf():
         
         # Split PDF
         reader = PdfReader(filepath)
-        output_dir = os.path.join(app.config['PROCESSED_FOLDER'], f"split_{uuid.uuid4().hex[:8]}")
+        output_dir = os.path.join(app.config['UPLOAD_FOLDER'], f"split_{uuid.uuid4().hex[:8]}")
         os.makedirs(output_dir, exist_ok=True)
         
         page_files = []
@@ -362,7 +329,7 @@ def split_pdf():
         
         # Create zip file
         zip_filename = f"split_pages_{uuid.uuid4().hex[:8]}.zip"
-        zip_path = os.path.join(app.config['PROCESSED_FOLDER'], zip_filename)
+        zip_path = os.path.join(app.config['UPLOAD_FOLDER'], zip_filename)
         
         with zipfile.ZipFile(zip_path, 'w') as zip_file:
             for page_file in page_files:
@@ -418,7 +385,7 @@ def pdf_to_images():
         
         # Convert PDF to images
         images = pdf2image.convert_from_path(filepath)
-        output_dir = os.path.join(app.config['PROCESSED_FOLDER'], f"images_{uuid.uuid4().hex[:8]}")
+        output_dir = os.path.join(app.config['UPLOAD_FOLDER'], f"images_{uuid.uuid4().hex[:8]}")
         os.makedirs(output_dir, exist_ok=True)
         
         image_files = []
@@ -430,7 +397,7 @@ def pdf_to_images():
         
         # Create zip file
         zip_filename = f"pdf_images_{uuid.uuid4().hex[:8]}.zip"
-        zip_path = os.path.join(app.config['PROCESSED_FOLDER'], zip_filename)
+        zip_path = os.path.join(app.config['UPLOAD_FOLDER'], zip_filename)
         
         with zipfile.ZipFile(zip_path, 'w') as zip_file:
             for image_file in image_files:
@@ -496,9 +463,8 @@ def images_to_pdf():
         
         # Create PDF
         pdf_filename = f"images_to_pdf_{uuid.uuid4().hex[:8]}.pdf"
-        pdf_path = os.path.join(app.config['PROCESSED_FOLDER'], pdf_filename)
+        pdf_path = os.path.join(app.config['UPLOAD_FOLDER'], pdf_filename)
         
-        os.makedirs(app.config['PROCESSED_FOLDER'], exist_ok=True)
         images[0].save(pdf_path, save_all=True, append_images=images[1:])
         
         # Clean up temp files
