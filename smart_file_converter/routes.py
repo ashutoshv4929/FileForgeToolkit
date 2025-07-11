@@ -6,8 +6,8 @@ from flask import render_template, request, redirect, url_for, flash, jsonify, s
 from werkzeug.utils import secure_filename
 from app import app, db
 from models import ConversionHistory, ExtractedText, AppSettings
-from services.ocr_service import OCRService
-from services.cloud_storage import CloudStorageService
+from .services.ocr_service import OCRService
+from .services.cloud_storage import CloudStorageService
 from sqlalchemy import func
 
 # Initialize services
