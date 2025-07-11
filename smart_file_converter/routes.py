@@ -5,7 +5,7 @@ from datetime import datetime
 from flask import render_template, request, redirect, url_for, flash, jsonify, send_file
 from werkzeug.utils import secure_filename
 from app import app, db
-from smart_file_converter.models import ConversionHistory, ExtractedText, AppSettings
+from .models import ConversionHistory, ExtractedText, AppSettings
 from smart_file_converter.services.ocr_service import OCRService
 from sqlalchemy import func
 

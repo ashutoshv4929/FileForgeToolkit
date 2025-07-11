@@ -64,7 +64,6 @@ def save_file_locally(file):
 db.init_app(app)
 
 with app.app_context():
-    # Import models to ensure tables are created
     db.create_all()
 
 if __name__ == '__main__':
