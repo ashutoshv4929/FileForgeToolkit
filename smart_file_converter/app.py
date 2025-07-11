@@ -15,7 +15,7 @@ import re
 import binascii
 
 # Set up logging
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 
 class Base(DeclarativeBase):
     pass
@@ -78,13 +78,29 @@ else:
 
 # Initialize Google Cloud Storage
 bucket_name = os.environ.get('GOOGLE_CLOUD_STORAGE_BUCKET_NAME')
-if bucket_name:
-    storage_client = storage.Client(credentials=None, client_options={"api_key": api_key, "quota_project_id": project_id})
+if bucket_name and api_key and project_id:
+    # Create credentials with API key
+    from google.oauth2 import credentials
+    from google.auth.transport.requests import Request
+    
+    # Create an anonymous credentials object and set the API key in headers
+    creds = credentials.AnonymousCredentials()
+    creds = creds.with_quota_project(project_id)
+    
+    # Create a custom request object with the API key header
+    class CustomRequest(Request):
+        def __call__(self, url, method="GET", body=None, headers=None, **kwargs):
+            headers = headers or {}
+            headers["x-goog-api-key"] = api_key
+            return super().__call__(url, method, body, headers, **kwargs)
+    
+    # Initialize the storage client with the custom credentials and request
+    storage_client = storage.Client(project=project_id, credentials=creds, _http=CustomRequest())
     bucket = storage_client.bucket(bucket_name)
 else:
     storage_client = None
     bucket = None
-    logging.warning("Google Cloud Storage not configured - missing bucket name")
+    logging.warning("Google Cloud Storage not configured - missing bucket name or credentials")
 
 def save_file_locally(file):
     filename = str(uuid.uuid4()) + os.path.splitext(file.filename)[1]
