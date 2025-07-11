@@ -5,7 +5,7 @@ from flask import current_app
 from flask_login import UserMixin
 from werkzeug.security import generate_password_hash, check_password_hash
 import jwt
-from smart_file_converter import db, login
+from smart_file_converter import db
 
 class User(UserMixin, db.Model):
     """User model for authentication and authorization"""
@@ -88,6 +88,5 @@ class AppSettings(db.Model):
     def __repr__(self):
         return f'<AppSetting {self.key}>'
 
-@login.user_loader
 def load_user(id):
     return User.query.get(int(id))

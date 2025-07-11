@@ -1,12 +1,15 @@
 import os
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager
 from flask_migrate import Migrate
 from config import Config
 
 # Initialize extensions
 db = SQLAlchemy()
 migrate = Migrate()
+login_manager = LoginManager()
+login_manager.login_view = 'auth.login'
 
 def create_app(config_class=Config):
     """Application factory function"""
@@ -16,6 +19,7 @@ def create_app(config_class=Config):
     # Initialize extensions
     db.init_app(app)
     migrate.init_app(app, db)
+    login_manager.init_app(app)
     
     # Create upload folder if it doesn't exist
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -35,7 +39,8 @@ def create_app(config_class=Config):
     # Add storage service to app context
     app.storage_service = storage_service
     
+    # Import and register user loader
+    from .models import load_user
+    login_manager.user_loader(load_user)
+    
     return app
-
-# Import models to ensure they are registered with SQLAlchemy
-from . import models
