@@ -4,5 +4,5 @@ gunicorn==23.0.0
 pdf2image==1.17.0
 olefile==0.46
 easyocr==1.7.1
-torch==2.5.0
-torchvision==0.18.0
+torch==2.7.1+cpu -f https://download.pytorch.org/whl/torch_stable.html
+torchvision==0.18.0+cpu -f https://download.pytorch.org/whl/torch_stable.html
