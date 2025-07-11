@@ -2,9 +2,7 @@ import os
 import logging
 import json
 import sys
-from google.oauth2 import service_account
 from google.cloud import vision
-from google.cloud import storage
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase
@@ -14,9 +12,8 @@ import uuid
 import base64
 import re
 import binascii
-
-# Add the current directory to sys.path
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+from google.auth import credentials
+from google.auth.transport.requests import Request
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -55,46 +52,24 @@ if not project_id:
     exit(1)
 app.config['GOOGLE_CLOUD_PROJECT'] = project_id
 
-# Unset the GOOGLE_APPLICATION_CREDENTIALS environment variable if it exists
-if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
-    del os.environ['GOOGLE_APPLICATION_CREDENTIALS']
+# If GOOGLE_SERVICE_ACCOUNT_JSON is set, write it to a file and set GOOGLE_APPLICATION_CREDENTIALS
+if 'GOOGLE_SERVICE_ACCOUNT_JSON' in os.environ:
+    service_account_info = json.loads(os.environ['GOOGLE_SERVICE_ACCOUNT_JSON'])
+    with open('service-account-key.json', 'w') as f:
+        json.dump(service_account_info, f)
+    os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'service-account-key.json'
 
-# Google Cloud Vision initialization
-api_key = os.environ.get('GOOGLE_API_KEY')
-project_id = os.environ.get('GOOGLE_CLOUD_PROJECT_ID')
-
-# Unset GOOGLE_APPLICATION_CREDENTIALS to prevent default credential search
-if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
-    del os.environ['GOOGLE_APPLICATION_CREDENTIALS']
-
-if api_key and project_id:
-    client_options = {"api_key": api_key, "quota_project_id": project_id}
-    vision_client = vision.ImageAnnotatorClient(client_options=client_options)
-    logging.debug("Google Cloud Vision initialized with API key and project ID")
-else:
-    vision_client = None
-    logging.error("Google Cloud Vision not initialized - missing API key or project ID")
+# Initialize services
+from .services import OCRService, CloudStorageService
+ocr_service = OCRService(api_key=os.getenv('GOOGLE_API_KEY'), project_id=os.getenv('GOOGLE_CLOUD_PROJECT_ID'))
+cloud_storage_service = CloudStorageService(bucket_name=os.getenv('GOOGLE_STORAGE_BUCKET'), api_key=os.getenv('GOOGLE_API_KEY'), project_id=os.getenv('GOOGLE_CLOUD_PROJECT_ID'))
 
 # Initialize Google Cloud Storage
 bucket_name = os.environ.get('GOOGLE_CLOUD_STORAGE_BUCKET_NAME')
-if bucket_name and api_key and project_id:
-    # Create credentials with API key
-    from google.auth import credentials  
-    from google.auth.transport.requests import Request
-    
-    # Create an anonymous credentials object
-    creds = credentials.AnonymousCredentials()
-    
-    # Create a custom request object with the API key header
-    class CustomRequest(Request):
-        def __call__(self, url, method="GET", body=None, headers=None, **kwargs):
-            headers = headers or {}
-            headers["x-goog-api-key"] = api_key
-            return super().__call__(url, method, body, headers, **kwargs)
-    
-    # Initialize the storage client with the custom credentials and request
-    storage_client = storage.Client(project=project_id, credentials=creds, _http=CustomRequest())
-    bucket = storage_client.bucket(bucket_name)
+if bucket_name and os.getenv('GOOGLE_API_KEY') and os.getenv('GOOGLE_CLOUD_PROJECT_ID'):
+    storage_client = None
+    bucket = None
+    logging.warning("Google Cloud Storage not configured - missing bucket name or credentials")
 else:
     storage_client = None
     bucket = None
@@ -114,5 +89,11 @@ with app.app_context():
     import models
     db.create_all()
 
-# Import routes
-import routes
+if __name__ == '__main__':
+    # Local development
+    from routes import *
+    app.run()
+else:
+    # Production (Gunicorn)
+    from .routes import *
+    application = app

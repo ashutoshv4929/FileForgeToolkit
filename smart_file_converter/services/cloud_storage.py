@@ -4,23 +4,18 @@ from google.cloud import storage
 from google.oauth2 import service_account
 
 class CloudStorageService:
-    def __init__(self):
-        self.project_id = os.environ.get("GOOGLE_CLOUD_PROJECT")
-        self.bucket_name = os.environ.get("GOOGLE_CLOUD_STORAGE_BUCKET")
+    def __init__(self, bucket_name=None, api_key=None, project_id=None):
+        self.project_id = project_id
+        self.bucket_name = bucket_name
         self.client = None
         self.bucket = None
         
-        if self.project_id and self.bucket_name:
+        if bucket_name and api_key and project_id:
             try:
                 # Initialize the client
-                credentials_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
-                if credentials_path:
-                    credentials = service_account.Credentials.from_service_account_file(credentials_path)
-                    self.client = storage.Client(credentials=credentials, project=self.project_id)
-                else:
-                    # Use default credentials
-                    self.client = storage.Client(project=self.project_id)
-                
+                self.client = storage.Client(\
+                    client_options={'api_key': api_key, 'quota_project_id': project_id}
+                )
                 self.bucket = self.client.bucket(self.bucket_name)
                 logging.info(f"Google Cloud Storage initialized for project: {self.project_id}")
             except Exception as e:
@@ -28,7 +23,7 @@ class CloudStorageService:
                 self.client = None
                 self.bucket = None
         else:
-            logging.warning("Google Cloud Storage not configured - missing project ID or bucket name")
+            logging.warning("Google Cloud Storage not configured - missing project ID, bucket name or API key")
     
     def upload_file(self, local_file_path, remote_file_name):
         """Upload a file to Google Cloud Storage"""

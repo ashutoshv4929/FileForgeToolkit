@@ -7,18 +7,23 @@ from PIL import Image
 import pdf2image
 
 class OCRService:
-    def __init__(self):
+    def __init__(self, api_key=None, project_id=None):
         self.client = None
         
         try:
-            # Initialize Google Cloud Vision client
-            credentials_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
-            if credentials_path:
-                credentials = service_account.Credentials.from_service_account_file(credentials_path)
-                self.client = vision.ImageAnnotatorClient(credentials=credentials)
+            if api_key and project_id:
+                self.client = vision.ImageAnnotatorClient(
+                    client_options={'api_key': api_key, 'quota_project_id': project_id}
+                )
             else:
-                # Use default credentials
-                self.client = vision.ImageAnnotatorClient()
+                # Initialize Google Cloud Vision client
+                credentials_path = os.environ.get("GOOGLE_APPLICATION_CREDENTIALS")
+                if credentials_path:
+                    credentials = service_account.Credentials.from_service_account_file(credentials_path)
+                    self.client = vision.ImageAnnotatorClient(credentials=credentials)
+                else:
+                    # Use default credentials
+                    self.client = vision.ImageAnnotatorClient()
             
             logging.info("Google Cloud Vision API initialized successfully")
         except Exception as e:
