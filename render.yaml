@@ -2,7 +2,7 @@ services:
   - type: web
     name: file-forge-toolkit
     env: python
-    buildCommand: pip install -r smart_file_converter/requirements.txt
+    buildCommand: pip install -r smart_file_converter/requirements-new.txt
     startCommand: gunicorn smart_file_converter.app:app
     aptPackages:
       - tesseract-ocr
