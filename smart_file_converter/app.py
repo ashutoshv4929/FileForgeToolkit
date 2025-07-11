@@ -2,7 +2,6 @@ import os
 import logging
 import json
 import sys
-from google.cloud import vision
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase
@@ -12,8 +11,6 @@ import uuid
 import base64
 import re
 import binascii
-from google.auth import credentials
-from google.auth.transport.requests import Request
 
 # Set up logging
 logging.basicConfig(level=logging.DEBUG)
@@ -60,20 +57,8 @@ if 'GOOGLE_SERVICE_ACCOUNT_JSON' in os.environ:
     os.environ['GOOGLE_APPLICATION_CREDENTIALS'] = 'service-account-key.json'
 
 # Initialize services
-from .services import OCRService, CloudStorageService
-ocr_service = OCRService(api_key=os.getenv('GOOGLE_API_KEY'), project_id=os.getenv('GOOGLE_CLOUD_PROJECT_ID'))
-cloud_storage_service = CloudStorageService(bucket_name=os.getenv('GOOGLE_STORAGE_BUCKET'), api_key=os.getenv('GOOGLE_API_KEY'), project_id=os.getenv('GOOGLE_CLOUD_PROJECT_ID'))
-
-# Initialize Google Cloud Storage
-bucket_name = os.environ.get('GOOGLE_CLOUD_STORAGE_BUCKET_NAME')
-if bucket_name and os.getenv('GOOGLE_API_KEY') and os.getenv('GOOGLE_CLOUD_PROJECT_ID'):
-    storage_client = None
-    bucket = None
-    logging.warning("Google Cloud Storage not configured - missing bucket name or credentials")
-else:
-    storage_client = None
-    bucket = None
-    logging.warning("Google Cloud Storage not configured - missing bucket name or credentials")
+from .services import OCRService
+ocr_service = OCRService()
 
 def save_file_locally(file):
     filename = str(uuid.uuid4()) + os.path.splitext(file.filename)[1]
