@@ -2,7 +2,16 @@ services:
   - type: web
     name: file-forge-toolkit
     env: python
-    buildCommand: "pip install -r requirements.txt"
+    buildCommand: |
+      apt-get update && \
+      apt-get install -y tesseract-ocr \
+                         libtesseract-dev \
+                         libleptonica-dev \
+                         poppler-utils
+      pip install -r requirements.txt
     startCommand: gunicorn smart_file_converter.app:app
     aptPackages:
       - tesseract-ocr
+      - libtesseract-dev
+      - libleptonica-dev
+      - poppler-utils
