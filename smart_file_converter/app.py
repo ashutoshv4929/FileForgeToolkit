@@ -3,6 +3,7 @@ import logging
 import json
 from google.oauth2 import service_account
 from google.cloud import vision
+from google.cloud import storage
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.orm import DeclarativeBase
@@ -54,15 +55,33 @@ app.config['GOOGLE_CLOUD_PROJECT'] = project_id
 if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
     del os.environ['GOOGLE_APPLICATION_CREDENTIALS']
 
-# Initialize Google Cloud Vision client
+# Google Cloud Vision initialization
 api_key = os.environ.get('GOOGLE_API_KEY')
-if not api_key:
-    logging.error("ERROR: GOOGLE_API_KEY environment variable not set")
-    exit(1)
+project_id = os.environ.get('GOOGLE_CLOUD_PROJECT_ID')
 
-vision_client = vision.ImageAnnotatorClient(credentials=None, client_options={"api_key": api_key})
+# Unset GOOGLE_APPLICATION_CREDENTIALS to prevent default credential search
+if 'GOOGLE_APPLICATION_CREDENTIALS' in os.environ:
+    del os.environ['GOOGLE_APPLICATION_CREDENTIALS']
 
-# --- END OF CHANGED SECTION ---
+# Initialize Vision client with API key
+if api_key and project_id:
+    vision_client = vision.ImageAnnotatorClient(
+        credentials=None,
+        client_options={"api_key": api_key, "quota_project_id": project_id}
+    )
+else:
+    vision_client = None
+    logging.error("Google Cloud Vision API not configured")
+
+# Initialize Google Cloud Storage
+bucket_name = os.environ.get('GOOGLE_CLOUD_STORAGE_BUCKET_NAME')
+if bucket_name:
+    storage_client = storage.Client(credentials=None, client_options={"api_key": api_key, "quota_project_id": project_id})
+    bucket = storage_client.bucket(bucket_name)
+else:
+    storage_client = None
+    bucket = None
+    logging.warning("Google Cloud Storage not configured - missing bucket name")
 
 def save_file_locally(file):
     filename = str(uuid.uuid4()) + os.path.splitext(file.filename)[1]
