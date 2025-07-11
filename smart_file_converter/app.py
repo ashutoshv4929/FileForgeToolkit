@@ -14,7 +14,7 @@ import re
 import binascii
 
 # Set up logging
-logging.basicConfig(level=logging.DEBUG)
+logging.basicConfig(level=logging.INFO)
 
 class Base(DeclarativeBase):
     pass
@@ -41,12 +41,24 @@ if not os.path.exists(UPLOAD_FOLDER):
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 app.config['PROCESSED_FOLDER'] = 'static/processed'
 
-# Google Cloud configuration
-app.config['GOOGLE_CLOUD_PROJECT'] = os.environ.get("GOOGLE_CLOUD_PROJECT")
+# --- GOOGLE CLOUD CONFIGURATION ---
 
-# Use API key for Google Cloud Vision
+# Get project ID from environment variable
+project_id = os.environ.get("GOOGLE_CLOUD_PROJECT_ID")
+if not project_id:
+    logging.error("ERROR: GOOGLE_CLOUD_PROJECT_ID environment variable not set.")
+    exit(1)
+app.config['GOOGLE_CLOUD_PROJECT'] = project_id
+
+# Initialize Google Cloud Vision client
 api_key = os.environ.get('GOOGLE_API_KEY')
+if not api_key:
+    logging.error("ERROR: GOOGLE_API_KEY environment variable not set")
+    exit(1)
+
 vision_client = vision.ImageAnnotatorClient(client_options={"api_key": api_key})
+
+# --- END OF CHANGED SECTION ---
 
 def save_file_locally(file):
     filename = str(uuid.uuid4()) + os.path.splitext(file.filename)[1]
