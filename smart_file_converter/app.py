@@ -69,9 +69,12 @@ if api_key and project_id:
         credentials=None,
         client_options={"api_key": api_key, "quota_project_id": project_id}
     )
+    logging.debug(f"Google Cloud Vision initialized with API key and project ID")
 else:
     vision_client = None
     logging.error("Google Cloud Vision API not configured")
+    logging.debug(f"GOOGLE_API_KEY: {'set' if api_key else 'not set'}")
+    logging.debug(f"GOOGLE_CLOUD_PROJECT_ID: {'set' if project_id else 'not set'}")
 
 # Initialize Google Cloud Storage
 bucket_name = os.environ.get('GOOGLE_CLOUD_STORAGE_BUCKET_NAME')
