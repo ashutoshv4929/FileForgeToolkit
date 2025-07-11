@@ -7,6 +7,6 @@ Pillow==11.0.0
 pdf2image==1.17.0
 olefile==0.46
 google-cloud-storage==2.15.0
-grpcio==1.64.0
-grpcio==1.64.0
+--only-binary=:all:
+--only-binary=grpcio
 grpcio==1.64.0
