@@ -1,12 +1,11 @@
 # smart_file_converter/extensions.py
-
 from flask_sqlalchemy import SQLAlchemy
 from flask_migrate import Migrate
 from flask_login import LoginManager
 from flask_mail import Mail
 from flask_bootstrap import Bootstrap
 from flask_moment import Moment
-from .services.cloud_storage import CloudStorageService
+from .services.local_storage import CloudStorageService
 from .services.ocr_service import OCRService
 
 # Initialize all extensions here
