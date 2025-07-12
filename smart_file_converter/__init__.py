@@ -124,7 +124,6 @@ def create_app(config_class=Config):
             admin = User(
                 username='admin',
                 email='admin@example.com',
-                is_active=True
             )
             admin.set_password('admin123')
             db.session.add(admin)
