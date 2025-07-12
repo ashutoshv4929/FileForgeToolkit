@@ -1,11 +1,12 @@
 # 1. बेस इमेज: पाइथन 3.12 का उपयोग करें
 FROM python:3.12-slim
 
-# 2. सिस्टम पैकेज इंस्टॉल करें (Tesseract, आदि)
+# 2. सभी जरूरी सिस्टम पैकेज इंस्टॉल करें
 RUN apt-get update && apt-get install -y \
     tesseract-ocr \
     libmagic1 \
     poppler-utils \
+    libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # 3. वर्किंग डायरेक्टरी सेट करें
