@@ -7,6 +7,7 @@ RUN apt-get update && apt-get install -y \
     libmagic1 \
     poppler-utils \
     libpq-dev \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 # 3. वर्किंग डायरेक्टरी सेट करें
