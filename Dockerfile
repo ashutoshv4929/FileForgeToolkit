@@ -1,5 +1,5 @@
-# Use the official Python image as a base image
-FROM python:3.9-slim
+# Use the official Python 3.9 image as a base image
+FROM python:3.9.11-slim-buster
 
 # Set environment variables
 ENV PYTHONDONTWRITEBYTECODE=1 \
@@ -18,6 +18,14 @@ RUN apt-get update && apt-get install -y \
     poppler-utils \
     python3-dev \
     build-essential \
+    gcc \
+    python3-cffi \
+    libcairo2 \
+    libpango-1.0-0 \
+    libpangocairo-1.0-0 \
+    libgdk-pixbuf2.0-0 \
+    libffi-dev \
+    shared-mime-info \
     && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
@@ -25,7 +33,7 @@ WORKDIR /app
 
 # Copy requirements file and install dependencies
 COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
+RUN pip install --no-cache-dir --upgrade pip==21.3.1 && \
     pip install --no-cache-dir -r requirements.txt
 
 # Copy the rest of the application
@@ -36,10 +44,7 @@ RUN mkdir -p /app/logs \
     && mkdir -p /app/uploads \
     && chmod -R a+rwx /app/logs \
     && chmod -R a+rwx /app/uploads \
-    && chmod +x /app/build.sh
-
-# Run build script
-RUN ./build.sh
+    && if [ -f "/app/build.sh" ]; then chmod +x /app/build.sh && ./build.sh; fi
 
 # Expose the port the app runs on
 EXPOSE 5000
