@@ -21,6 +21,9 @@ mail = Mail()
 bootstrap = Bootstrap()
 moment = Moment()
 
+# Make db available for import
+__all__ = ['db', 'create_app']
+
 # Import models to ensure they are registered with SQLAlchemy
 from .models import User, ConversionHistory, ExtractedText, AppSettings
 
@@ -68,16 +71,31 @@ def create_app(config_class=Config):
     # Register blueprints
     from .main import bp as main_bp
     app.register_blueprint(main_bp)
-
-    from .auth import bp as auth_bp
-    app.register_blueprint(auth_bp, url_prefix='/auth')
-
-    from .api import bp as api_bp
-    app.register_blueprint(api_bp, url_prefix='/api')
     
-    # Register health check blueprint
-    from .health import health_bp
-    app.register_blueprint(health_bp)
+    # Initialize main blueprint
+    from .main import init_app as init_main
+    init_main(app)
+    
+    # Register auth blueprint if it exists
+    try:
+        from .auth import bp as auth_bp
+        app.register_blueprint(auth_bp, url_prefix='/auth')
+    except ImportError:
+        pass  # Auth blueprint is optional
+    
+    # Register API blueprint if it exists
+    try:
+        from .api import bp as api_bp
+        app.register_blueprint(api_bp, url_prefix='/api')
+    except ImportError:
+        pass  # API blueprint is optional
+    
+    # Register health check blueprint if it exists
+    try:
+        from .health import health_bp
+        app.register_blueprint(health_bp)
+    except ImportError:
+        pass  # Health blueprint is optional
     
     # Import and register user loader
     from .models import load_user

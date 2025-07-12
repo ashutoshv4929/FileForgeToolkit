@@ -1,14 +1,19 @@
+# Force Docker-based deployment
 services:
   - type: web
     name: file-forge-toolkit
     env: docker
-    region: singapore  # Choose your preferred region
+    plan: free
+    region: singapore
+    dockerContext: .
     dockerfilePath: ./Dockerfile
     envVars:
       - key: PYTHONUNBUFFERED
         value: "1"
       - key: FLASK_ENV
         value: production
+      - key: FLASK_APP
+        value: "smart_file_converter.app"
       - key: SECRET_KEY
         generateValue: true
       - key: TESSERACT_CMD
@@ -16,6 +21,7 @@ services:
       - key: UPLOAD_FOLDER
         value: /app/uploads
       - key: MAX_CONTENT_LENGTH
-        value: "16777216"
+        value: "16777216"  # 16MB max upload size
     healthCheckPath: /health
     autoDeploy: true
+    buildCommand: ""  # Clear any build command to prevent Poetry/uv usage
